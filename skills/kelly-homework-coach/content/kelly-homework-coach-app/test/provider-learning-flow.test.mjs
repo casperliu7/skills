@@ -75,6 +75,24 @@ function base`,
       await provider.getMistakeRequestStatus({ requestId: "crqfixture", mistake_id: "m-fixture" }),
       "merged",
     );
+    const validRequest = testGlobal.homeworkTestClient.changeRequests.get;
+    testGlobal.homeworkTestClient.changeRequests.get = async () => ({
+      baseId: "wrong-base",
+      operations: [{ targetRecordId: "record-fixture" }],
+      status: "merged",
+    });
+    await assert.rejects(provider.getMistakeRequestStatus({ requestId: "crqfixture", mistake_id: "m-fixture" }));
+    testGlobal.homeworkTestClient.changeRequests.get = validRequest;
+    await assert.rejects(provider.getMistakeRequestStatus({ requestId: "invalid-id", mistake_id: "m-fixture" }));
+    const validWrite = testGlobal.homeworkTestClient.records.changeRequest;
+    testGlobal.homeworkTestClient.records.changeRequest = async () => {
+      throw new Error("conflict-fixture");
+    };
+    await assert.rejects(
+      provider.submitMistakeCause({ mistake_id: "m-fixture", cause: "another observation" }),
+      /conflict-fixture/,
+    );
+    testGlobal.homeworkTestClient.records.changeRequest = validWrite;
     calls.length = 0;
     Object.assign(raw, {
       "paper-id": "p-fixture",

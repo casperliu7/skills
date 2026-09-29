@@ -811,13 +811,15 @@ async function finishRun() {
   const attempt = buildPaperAttempt(paper, runState.answers, runState.hints, undefined, runState.history);
 
   if (state.data?.demo) {
-    paper.analysis = { ...paper.analysis, wrong_count: attempt.wrong_count, attempt };
+    paper.analysis = {
+      ...paper.analysis,
+      wrong_count: attempt.wrong_count,
+      attempt,
+      attempts: [...(paper.analysis?.attempts || []), attempt],
+    };
     paper.status = "needs_review";
-    const review = (state.data.snapshot.review_items || []).find((item) => item.target_id === paper.paper_id);
-    if (review) {
-      review.status = "needs_review";
-      review.decision = null;
-    }
+    // Demo mirrors the real single-paper proposal: never reset/reuse the
+    // old parent confirmation as approval of this new result.
     state.workflowCount = null;
     runState.stage = "submitted";
     state.notice = t("decisionRecordedDemo");

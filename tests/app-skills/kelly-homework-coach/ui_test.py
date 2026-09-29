@@ -87,7 +87,7 @@ def test_demo_ui(browser, base_url: str) -> None:
     # A proposed action is rendered as a sentence a parent can read. The raw
     # `add_to_mistake_book` used to render verbatim in the row chip AND in the
     # detail pane.
-    assert "Add to the mistake notebook" in page.locator(".row-list .row").first.inner_text()
+    assert "Check the original question and explanation" in page.locator(".row-list .row").first.inner_text()
     assert "add_to_mistake_book" not in page.locator(".app-shell").inner_text()
 
     # ?demo= used to swallow every decision ("Demo mode: decision write
@@ -174,14 +174,14 @@ def test_demo_ui(browser, base_url: str) -> None:
     assert page.locator(".question-title").first.inner_text() == "You got 1 of 2 right."
     page.locator("[data-run-finish]").click()
     page.wait_for_timeout(300)
-    # Ready 1 -> 0, Needs Review 3 -> 4: the paper is back in front of a person.
-    assert page.locator(".filter button").nth(1).inner_text().endswith("4")
-    assert page.locator(".filter button").nth(2).inner_text().endswith("0")
+    # Paper returns to review, but the OLD confirmation stays approved.
+    assert page.locator(".filter button").nth(1).inner_text().endswith("3")
+    assert page.locator(".filter button").nth(2).inner_text().endswith("1")
 
     # A paper with no answer key says so instead of inventing one to mark.
     page.goto(f"{base_url}/?demo=papers&lang=en#/papers/paper-fractions-01")
     page.wait_for_load_state("networkidle")
-    assert page.locator("[data-run-start]").count() == 1
+    assert page.locator("[data-run-start]").count() == 0
 
     # zh-CN is Simplified. It used to serve Hong Kong Traditional, because
     # resolveLanguage() routes every zh-* tag to the one `zh` bundle.
@@ -405,13 +405,26 @@ def test_busabase_provisioning(browser) -> None:
                     # the .question-title class — scope to the first match
                     # (the review's own hero-answer) to avoid a strict-mode
                     # violation on the duplicate selector.
-                    assert page.locator(".question-title").first.inner_text() == "Fixture review title"
+                    assert "Fixture" in page.locator(".detail-panel").inner_text()
                     page.locator("#reviewNote").fill("Trusted: matches manual spot-check of the fixture.")
                     page.locator("[data-decision-action='approve']").click()
                     page.wait_for_timeout(800)
                     assert_no_horizontal_overflow(page)
                     assert not errors, errors
                     context.close()
+
+                # A browser decision proposes two pending writes. Before reviewer
+                # approval/merge, neither canonical record may change.
+                pending = read_json(f"{busabase_url}/api/v1/change-requests")
+                pending = pending if isinstance(pending, list) else pending.get("changeRequests", [])
+                writes = [cr for cr in pending if cr.get("status") == "in_review"]
+                assert len(writes) == 2, pending
+                canonical = read_json(f"{busabase_url}/api/v1/records?baseId={reviews_base['baseId']}")
+                canonical = canonical if isinstance(canonical, list) else canonical.get("records", [])
+                assert all((r.get("headCommit", {}).get("payload") or r.get("headCommit", {}).get("fields", {})).get("status") == "needs_review" for r in canonical)
+                post_json(f"{busabase_url}/api/v1/change-requests/reviews", {"changeRequestIds": [cr["id"] for cr in writes], "verdict": "approved"})
+                merged = post_json(f"{busabase_url}/api/v1/change-requests/merge", {"changeRequestIds": [cr["id"] for cr in writes]})
+                assert all(result.get("ok") for result in merged["results"]), merged
 
                 records = read_json(f"{busabase_url}/api/v1/records?baseId={reviews_base['baseId']}")
                 record_items = records if isinstance(records, list) else records.get("records", [])
@@ -467,7 +480,7 @@ def main() -> None:
                     test_demo_ui(browser, base_url)
                     print("PASS OSS - demo UI at desktop and phone viewports")
                     test_busabase_provisioning(browser)
-                    print("PASS OSS - lazy provisioning, decision write with target sync, and persistence against temporary Busabase")
+                    print("PASS OSS - lazy provisioning, pending decision writes, reviewed merge, and persistence against temporary Busabase")
                 except Exception:
                     for index, context in enumerate(browser.contexts):
                         for page_index, page in enumerate(context.pages):
@@ -475,6 +488,8 @@ def main() -> None:
                     raise
                 finally:
                     browser.close()
+    from learning_flow_test import main as test_learning_flow
+    test_learning_flow()
 
 
 if __name__ == "__main__":

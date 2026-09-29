@@ -43,7 +43,7 @@ If a dependency is unavailable, preserve this skill's local artifact and product
 - The AirApp reads and writes its own Busabase Bases only; it never mutates an external system. Parent/teacher review decisions (approve / request changes / block) write straight onto the review record through `busabase-sdk`.
 - Child-facing output must be encouraging, step-by-step, and age-appropriate. Prefer hints and concepts over blunt answer dumping unless the user asks for the answer.
 - Parent/teacher-facing analysis may be more diagnostic, but should avoid shame language. Treat the student as capable and learning.
-- Student photos, names, school data, and answers are private education data. Never write a raw photo into a Busabase field — only a short `photo_label` description. Never commit any local credential file.
+- Student photos, names, school data, and answers are private education data. Never embed raw photo bytes in a text/JSON field. Default to a short `photo_label`; only link an uploaded `original-image` attachment after explicit per-photo consent. Never commit any local credential file.
 
 ## Busabase Resources
 
@@ -90,7 +90,7 @@ Required app views (hash routes):
 
 ## Homework Photo Workflow
 
-1. Ingest the student's photo or pasted problem text. If using vision/OCR, keep extracted text local unless the user explicitly approves a connector; only a short `photo_label` (e.g. "Homework photo, page 18 question 6") is ever written to Busabase, not the raw image itself.
+1. Ingest the student's photo or pasted problem text. If using vision/OCR, keep extracted text local unless the user explicitly approves a connector; use a short `photo_label` by default (e.g. "Homework photo, page 18 question 6"). An `original-image` attachment may be uploaded and linked only with explicit per-photo consent.
 2. Identify subject, grade, topic, required answer type, and whether the student's current answer is correct, wrong, or uncertain.
 3. Draft a child-facing explanation: one friendly summary, 2-5 short steps, one key concept, one self-check, and a next hint. Avoid long lectures.
 4. If wrong, create or update a mistake item with root cause, misconception, fix strategy, similar practice prompt, and a next review date.

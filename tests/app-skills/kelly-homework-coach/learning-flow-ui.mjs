@@ -49,6 +49,7 @@ const review = {
   risk: [],
   suggestions: [],
 };
+const evidence = process.env.HOMEWORK_EVIDENCE_DIR;
 const browser = await chromium.launch({ args: ["--no-sandbox"] });
 try {
   for (const width of [1440, 390]) {
@@ -70,6 +71,7 @@ try {
     assert(!detail.includes("private-parent-note-fixture"));
     assert(!detail.includes("reason-fixture-one"));
     assert.equal(await page.locator(".practice-diagram").count(), 3);
+    if (evidence) await page.screenshot({ path: `${evidence}/homework-child-paper-${width}.png`, fullPage: true });
     await page.locator("[data-run-start]").click();
     await page.locator("#runAnswer").fill("1");
     await page.locator("[data-run-submit]").click();
@@ -87,6 +89,7 @@ try {
     assert((await page.locator(".detail-panel").innerText()).includes("parent-only-fixture"));
     assert.equal(await page.locator(".practice-diagram").count(), 3);
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    if (evidence) await page.screenshot({ path: `${evidence}/homework-parent-paper-${width}.png`, fullPage: true });
     assert.deepEqual(errors, []);
     console.log(`PASS ${width}: child hiding, retry reasoning, open response, parent preview`);
     await page.close();
