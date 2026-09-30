@@ -577,23 +577,17 @@ function renderDetail(item, view, snapshot) {
     return renderPaper(item);
   }
   if (view === "review") return renderReviewItem(item, snapshot);
-  return renderQuestion(item);
+  return renderQuestion(item, false);
 }
 
-function renderQuestion(question) {
+function renderQuestion(question, parentReview) {
   const unverified = question.outcome === "uncertain" || !question.correct_answer;
-  return `
-    <section class="hero-answer">
-      <div class="chips">${statusChip(question.status)}${outcomeChip(question.outcome)}<span class="chip">${esc(question.subject)}</span><span class="chip">${esc(question.topic)}</span></div>
-      <h2 class="question-title">${esc(question.title)}</h2>
-      ${originalQuestion(question)}
-      ${state.studentFeedback[question.question_id] ? `<p class="note" role="status">${esc(state.studentFeedback[question.question_id])}</p>` : ""}
-      <div class="answer-grid">
-        <div class="answer-box"><span>${esc(t("studentAnswer"))}</span><b>${esc(question.student_answer)}</b></div>
-        <div class="answer-box ${unverified ? "is-flagged" : ""}"><span>${esc(t("correctAnswer"))}</span><b>${esc(question.correct_answer || t("uncertain"))}</b></div>
-      </div>
-      <p class="note">${esc(question.explanation?.kid_summary || "")}</p>
-    </section>
+  const explanation = `
+    <div class="answer-grid">
+      <div class="answer-box"><span>${esc(t("studentAnswer"))}</span><b>${esc(question.student_answer)}</b></div>
+      <div class="answer-box ${unverified ? "is-flagged" : ""}"><span>${esc(t("correctAnswer"))}</span><b>${esc(question.correct_answer || t("uncertain"))}</b></div>
+    </div>
+    <p class="note">${esc(question.explanation?.kid_summary || "")}</p>
     <section class="section">
       <h3>${esc(t("gentleSteps"))}</h3>
       <ol class="step-list">
@@ -602,7 +596,16 @@ function renderQuestion(question) {
     </section>
     ${infoSection(t("keyConcept"), question.explanation?.key_concept)}
     ${infoSection(t("selfCheck"), question.explanation?.self_check)}
-    ${infoSection(t("nextHint"), question.explanation?.next_hint)}
+  `;
+  return `
+    <section class="hero-answer">
+      <div class="chips">${statusChip(question.status)}${outcomeChip(question.outcome)}<span class="chip">${esc(question.subject)}</span><span class="chip">${esc(question.topic)}</span></div>
+      <h2 class="question-title">${esc(question.title)}</h2>
+      ${originalQuestion(question)}
+      ${state.studentFeedback[question.question_id] ? `<p class="note" role="status">${esc(state.studentFeedback[question.question_id])}</p>` : ""}
+      ${parentReview ? explanation : `${infoSection(t("nextHint"), question.explanation?.next_hint)}<details class="section" data-question-explanation><summary>${esc(t("revealQuestionExplanation"))}</summary>${explanation}</details>`}
+    </section>
+    ${parentReview ? infoSection(t("nextHint"), question.explanation?.next_hint) : ""}
   `;
 }
 
@@ -1068,7 +1071,7 @@ function findTarget(snapshot, item) {
 }
 
 function targetSummary(target, type) {
-  if (type === "question") return renderQuestion(target);
+  if (type === "question") return renderQuestion(target, true);
   if (type === "mistake") return renderMistake(target);
   return renderPaper(target);
 }

@@ -77,7 +77,12 @@ def main():
                     assert any(fields(row).get("title") == "Recorder updated" for row in rows(busabase, bases["questions"]))
                     page.reload(); page.wait_for_load_state("networkidle")
                     # Story 1: enter from home, child feedback is not approval.
-                    page.locator("[data-select-id]").first.click()
+                    page.locator("[data-select-id='fixture-q-001']").click()
+                    assert "Step one" not in page.locator(".detail-panel").inner_text()
+                    assert page.locator("[data-question-explanation]").count() == 1
+                    assert not page.locator("[data-question-explanation]").evaluate("element => element.open")
+                    page.locator("[data-question-explanation] summary").click()
+                    assert "Step one" in page.locator("[data-question-explanation]").text_content(), page.locator("[data-question-explanation]").text_content()[:400]
                     page.locator("[data-understand]").click()
                     assert not pending(busabase)
                     assert fields(rows(busabase, bases["questions"])[0])["status"] == "needs_review"

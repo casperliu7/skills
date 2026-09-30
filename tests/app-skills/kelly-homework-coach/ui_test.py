@@ -67,6 +67,17 @@ def test_demo_ui(browser, base_url: str) -> None:
     assert page.locator(".metric-band .metric").count() == 3
     assert page.locator(".row-list .row").count() == 4
     assert page.locator(".photo-box [data-local-photo]").count() == 1
+    page.locator("[data-select-id]").first.click()
+    explanation = page.locator("[data-question-explanation]")
+    assert explanation.count() == 1 and not explanation.evaluate("element => element.open")
+    assert not page.locator(".detail-panel .answer-box").first.is_visible()
+    explanation.locator("summary").click()
+    assert page.locator(".detail-panel .answer-box").first.is_visible()
+    page.goto(f"{base_url}/?demo=review&lang=en#/review/rv-math-borrowing")
+    page.wait_for_load_state("networkidle")
+    assert "Ones: 3 cannot" in page.locator(".detail-panel").inner_text()
+    page.goto(f"{base_url}/?demo=student&lang=en#/student")
+    page.wait_for_load_state("networkidle")
     # The editorial vocabulary the recording depends on being legible.
     assert page.locator(".panel-header .eyebrow").count() == 1
     assert page.locator(".panel-header .headline").inner_text() == "Mia has 3 questions open."
@@ -201,6 +212,11 @@ def test_demo_ui(browser, base_url: str) -> None:
         page.goto(f"{base_url}/?demo=student&lang=en#/student")
         page.wait_for_load_state("networkidle")
         assert_no_horizontal_overflow(page)
+        page.locator("[data-select-id]").first.click()
+        explanation = page.locator("[data-question-explanation]")
+        assert explanation.count() == 1 and not explanation.evaluate("element => element.open")
+        explanation.locator("summary").click()
+        assert page.locator(".detail-panel .answer-box").first.is_visible()
 
         page.locator("[data-open-sidebar]").click()
         assert page.locator("body.sidebar-open").count() == 1
