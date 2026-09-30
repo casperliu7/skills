@@ -279,6 +279,19 @@ export const busabaseProvider = {
     const existing = await findRecord("reviews", "review-id", review_id);
     if (!existing) throw new Error(`Review not found: ${review_id}`);
     const current = normalizeFields(existing.headCommit?.payload || existing.headCommit?.fields || existing.fields);
+    if (current.target_type === "paper" && current.target_id) {
+      const target = await findRecord("papers", "paper-id", current.target_id);
+      if (target) {
+        const paper = computePaperFromRow(
+          normalizeFields(target.headCommit?.payload || target.headCommit?.fields || target.fields),
+        );
+        const latest = paper.analysis?.attempts?.at(-1);
+        if (latest)
+          throw new Error(
+            "Practice results require a separate review; the old paper approval cannot unlock a completed paper",
+          );
+      }
+    }
     const now = new Date().toISOString();
     const nextStatus = statusForAction(action);
 
@@ -368,6 +381,49 @@ export const busabaseProvider = {
       `Practice result for ${paper_id}; review the new attempt separately from the old paper approval`,
     );
     if (cr.status !== "in_review") throw new Error("Expected pending result request");
+    return { id: cr.id, status: cr.status };
+  },
+
+  async submitAttemptReview({ paper_id, attempted_at, verdicts, comment } = {}) {
+    if (!paper_id || !attempted_at || !Array.isArray(verdicts) || !String(comment || "").trim())
+      throw new Error("A specific attempt, manual marks and a parent note are required");
+    await ensureResources();
+    const existing = await findRecord("papers", "paper-id", paper_id);
+    if (!existing) throw new Error("Paper not found");
+    const current = normalizeFields(existing.headCommit?.payload || existing.headCommit?.fields || existing.fields);
+    const paper = computePaperFromRow(current);
+    const attempts = paper.analysis?.attempts || [];
+    const attempt = attempts.at(-1);
+    if (paper.status !== "needs_review" || !attempt || attempt.attempted_at !== attempted_at)
+      throw new Error("Attempt is no longer current; refresh before reviewing");
+    const prior = paper.analysis.attempt_reviews || [];
+    if (prior.some((entry) => entry.attempted_at === attempted_at)) throw new Error("Attempt already reviewed");
+    const open = attempt.results.filter((result) => result.outcome === "ungraded").map((result) => result.ref);
+    if (
+      verdicts.length !== open.length ||
+      new Set(verdicts.map((v) => v.ref)).size !== open.length ||
+      verdicts.some((v) => !open.includes(v.ref) || !["correct", "wrong"].includes(v.outcome))
+    )
+      throw new Error("Each open response needs one manual mark");
+    const next = {
+      ...paper.analysis,
+      attempt_reviews: [
+        ...prior,
+        {
+          attempted_at,
+          verdicts: verdicts.map(({ ref, outcome }) => ({ ref, outcome })),
+          comment: String(comment).trim().slice(0, 2000),
+          reviewed_at: new Date().toISOString(),
+        },
+      ],
+    };
+    const cr = await updateRecord(
+      "papers",
+      existing,
+      basePaperFields({ ...paper, analysis: next }),
+      `Parent review of practice attempt ${attempted_at} on ${paper_id}`,
+    );
+    if (cr.status !== "in_review") throw new Error("Expected pending attempt review request");
     return { id: cr.id, status: cr.status };
   },
 

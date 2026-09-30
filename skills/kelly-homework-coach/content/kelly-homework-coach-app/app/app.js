@@ -42,6 +42,7 @@ const state = {
   mistakeSubmissions: {},
   mistakeRequestIds: {},
   causeStatus: {},
+  attemptReviewRequests: {},
 };
 
 const PAGE_TARGETS = {
@@ -559,6 +560,11 @@ function studentActions(view, item) {
 }
 
 function reviewActions(item) {
+  if (item.target_type === "paper") {
+    const paper = (state.data?.snapshot?.papers || []).find((entry) => entry.paper_id === item.target_id);
+    const attempt = paper && latestAttempt(paper);
+    if (attempt) return `<span class="decision-state">${esc(t("oldPaperApprovalNote"))}</span>`;
+  }
   if (["approved", "done", "blocked"].includes(item.status) && state.reopenedReviewId !== item.review_id) {
     return `<span class="decision-state">${esc(t("decisionSaved"))}</span><button class="plain" data-reopen-review="${esc(item.review_id)}" type="button">${esc(t("reReview"))}</button>`;
   }
@@ -654,11 +660,50 @@ function practiceDiagram(item) {
   </svg><figcaption>${esc(diagram.note)} · ${esc(t("diagramNotToScale"))}</figcaption></figure>`;
 }
 
+function latestAttempt(paper) {
+  return paper.analysis?.attempts?.at(-1) || null;
+}
+
+function attemptHistory(paper, parent = false) {
+  const attempts = paper.analysis?.attempts || [];
+  if (!attempts.length) return "";
+  const reviews = paper.analysis?.attempt_reviews || [];
+  return `<section class="section"><h3>${esc(t("attemptHistory"))}</h3>${attempts
+    .map((attempt) => {
+      const review = reviews.find((entry) => entry.attempted_at === attempt.attempted_at);
+      return `<div class="paper-item"><p><b>${esc(attempt.attempted_at)}</b> · ${esc(tf("runScore", { correct: attempt.correct, total: attempt.graded }))} · ${esc(review ? t("attemptReviewed") : t("attemptPending"))}</p>
+      ${parent ? (attempt.results || []).map((result) => `<div class="paper-item"><b>${esc(result.ref)}. ${esc(result.prompt)}</b><p>${esc(t("studentAnswer"))}: ${esc(result.given)}</p><p>${esc(t("firstAnswer"))}: ${esc(result.first_given)} · ${esc(result.first_outcome)}</p><p>${esc(t("answerHistory"))}: ${esc((result.answer_history || []).map((step) => step.given).join(" → "))}</p><p>${esc(t("marking"))}: ${esc(review?.verdicts?.find((v) => v.ref === result.ref)?.outcome || result.outcome)}</p></div>`).join("") : `<p class="note">${esc(t("attemptStudentNote"))}</p>`}
+      ${parent && review ? `<p>${esc(t("parentNotes"))}: ${esc(review.comment)}</p>` : ""}</div>`;
+    })
+    .join("")}</section>`;
+}
+
+function attemptReviewForm(paper) {
+  const attempt = latestAttempt(paper);
+  if (
+    !attempt ||
+    paper.status !== "needs_review" ||
+    (paper.analysis?.attempt_reviews || []).some((entry) => entry.attempted_at === attempt.attempted_at)
+  )
+    return "";
+  const open = (attempt.results || []).filter((entry) => entry.outcome === "ungraded");
+  return `<section class="section"><h3>${esc(t("reviewAttempt"))}</h3>${state.attemptReviewRequests[paper.paper_id] ? `<p role="status">${esc(t("attemptReviewPending"))} ${esc(state.attemptReviewRequests[paper.paper_id])}</p>` : ""}<p class="note">${esc(t("reviewAttemptHint"))}</p>
+    ${open.map((entry) => `<div class="field"><label for="attemptVerdict${esc(entry.ref)}">${esc(entry.ref)}. ${esc(entry.prompt)}</label><select id="attemptVerdict${esc(entry.ref)}" data-attempt-verdict="${esc(entry.ref)}"><option value="">${esc(t("selectMark"))}</option><option value="correct">${esc(t("correct"))}</option><option value="wrong">${esc(t("wrong"))}</option></select></div>`).join("")}
+    <div class="field"><label for="attemptNote">${esc(t("parentNotes"))}</label><textarea id="attemptNote" maxlength="2000"></textarea></div><button class="primary" type="button" data-submit-attempt-review="${esc(paper.paper_id)}" ${state.attemptReviewRequests[paper.paper_id] ? "disabled" : ""}>${esc(t("submitAttemptReview"))}</button></section>`;
+}
+
 function renderPaper(paper) {
+  const attempt = latestAttempt(paper);
+  const pending =
+    attempt && !(paper.analysis?.attempt_reviews || []).some((entry) => entry.attempted_at === attempt.attempted_at);
+  const review = (state.data?.snapshot?.review_items || []).find(
+    (item) => item.target_type === "paper" && item.target_id === paper.paper_id,
+  );
   return `
     <section class="hero-answer">
       <div class="chips">${statusChip(paper.status)}<span class="chip">${esc(paper.subject)}</span><span class="chip">${esc(paper.estimated_minutes)} ${esc(t("minutes"))}</span></div>
       <h2 class="question-title">${esc(paper.title)}</h2>
+      ${pending ? `<p class="note">${esc(t("attemptPending"))} ${review ? `<button class="plain" type="button" data-route="review/${esc(review.review_id)}">${esc(t("reviewAttempt"))}</button>` : esc(t("reviewLinkMissing"))}</p>` : ""}
       ${
         isGradeable(paper) && paper.status === "approved"
           ? `<div class="run-entry">
@@ -681,6 +726,7 @@ function renderPaper(paper) {
         )
         .join("")}
     </section>
+    ${attemptHistory(paper)}
     <p class="note">${esc(t("childPaperNote"))}</p>
   `;
 }
@@ -1028,6 +1074,8 @@ function renderPaperReview(item, paper) {
           `<section class="section"><h3>${esc(entry.ref)}. ${esc(entry.prompt)}</h3>${practiceDiagram(entry)}${infoSection(t("parentAnswer"), entry.answer || entry.parent_answer || t("manualAnswer"))}${infoSection(t("solution"), entry.explanation || t("solutionMissing"))}</section>`,
       )
       .join("")}
+    ${attemptHistory(paper, true)}
+    ${attemptReviewForm(paper)}
     ${infoSection(t("parentNotes"), paper.analysis?.deep_notes)}
     <section class="section"><h3>${esc(t("reviewNote"))}</h3>${settled ? `<p>${esc(item.decision?.comment || t("noNote"))}</p>` : `<textarea id="reviewNote">${esc(item.decision?.comment || item.suggested_note || "")}</textarea>`}</section>`;
 }
@@ -1426,6 +1474,56 @@ document.addEventListener("click", async (event) => {
       ? `/kelly-homework-coach I selected a local homework photo named "${state.localPhotoName}". Please analyze it, explain it gently, and record the result with scripts/record_homework.mjs.`
       : "/kelly-homework-coach Help me analyze the next homework photo, explain it gently, and record the result with scripts/record_homework.mjs.";
     await navigator.clipboard.writeText(prompt);
+    return;
+  }
+
+  if (button.dataset.submitAttemptReview) {
+    const paper = (state.data?.snapshot?.papers || []).find(
+      (entry) => entry.paper_id === button.dataset.submitAttemptReview,
+    );
+    const attempt = paper && latestAttempt(paper);
+    if (!attempt) return;
+    const open = (attempt.results || []).filter((entry) => entry.outcome === "ungraded");
+    const verdicts = open.map((entry) => ({
+      ref: entry.ref,
+      outcome: document.getElementById(`attemptVerdict${entry.ref}`)?.value || "",
+    }));
+    const comment = document.getElementById("attemptNote")?.value?.trim() || "";
+    if (!comment || verdicts.some((v) => !["correct", "wrong"].includes(v.outcome))) {
+      window.alert(t("reviewAttemptRequired"));
+      return;
+    }
+    if (state.busy || state.attemptReviewRequests[paper.paper_id]) return;
+    state.busy = true;
+    button.disabled = true;
+    try {
+      if (state.data.demo) {
+        (paper.analysis.attempt_reviews ||= []).push({
+          attempted_at: attempt.attempted_at,
+          verdicts,
+          comment,
+          reviewed_at: new Date().toISOString(),
+        });
+        state.notice = t("decisionRecordedDemo");
+        render();
+      } else {
+        const provider = await getProvider();
+        const result = await provider.submitAttemptReview({
+          paper_id: paper.paper_id,
+          attempted_at: attempt.attempted_at,
+          verdicts,
+          comment,
+        });
+        state.attemptReviewRequests[paper.paper_id] = result.id;
+        state.notice = `${t("attemptReviewPending")} ${result.id}`;
+        render();
+      }
+    } catch (error) {
+      window.alert(error.message);
+      button.disabled = false;
+    } finally {
+      state.busy = false;
+    }
     return;
   }
 

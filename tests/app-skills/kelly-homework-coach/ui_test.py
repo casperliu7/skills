@@ -189,6 +189,28 @@ def test_demo_ui(browser, base_url: str) -> None:
     assert page.locator(".filter button").nth(1).inner_text().endswith("3")
     assert page.locator(".filter button").nth(2).inner_text().endswith("1")
 
+    page.locator("[data-run-exit]").click()
+    assert "PRACTICE HISTORY" in page.locator(".detail-panel").inner_text()
+    assert "999" not in page.locator(".detail-panel").inner_text()
+    page.locator("[data-route='review']").first.click()
+    page.locator("[data-select-id='rv-weekend-paper']").click()
+    detail = page.locator(".detail-panel")
+    page.wait_for_function('document.querySelector(".detail-panel")?.innerText.includes("PRACTICE HISTORY")')
+    assert "PRACTICE HISTORY" in detail.inner_text()
+    assert "999" in detail.inner_text()
+    assert detail.locator("[data-decision-action='approve']").count() == 0
+    assert detail.locator("[data-submit-attempt-review]").count() == 1
+    assert detail.locator("[data-attempt-verdict]").count() == 1
+    page.on("dialog", lambda dialog: dialog.accept())
+    detail.locator("[data-submit-attempt-review]").click()
+    assert detail.locator("[data-submit-attempt-review]").count() == 1
+    detail.locator("[data-attempt-verdict]").select_option("correct")
+    detail.locator("#attemptNote").fill("Read the explanation and checked the reasoning.")
+    detail.locator("[data-submit-attempt-review]").click()
+    assert "This attempt has a parent mark" in detail.inner_text()
+    assert detail.locator("[data-submit-attempt-review]").count() == 0
+    assert not errors, errors
+
     # A paper with no answer key says so instead of inventing one to mark.
     page.goto(f"{base_url}/?demo=papers&lang=en#/papers/paper-fractions-01")
     page.wait_for_load_state("networkidle")
@@ -223,6 +245,33 @@ def test_demo_ui(browser, base_url: str) -> None:
         page.locator("#sidebarScrim").click(position={"x": width - 5, "y": 5})
         assert page.locator("body.sidebar-open").count() == 0
 
+        if width == 390:
+            page.goto(f"{base_url}/?demo=papers&lang=en#/papers/paper-mixed-01")
+            page.wait_for_load_state("networkidle")
+            page.locator("[data-run-start]").click()
+            page.fill("#runAnswer", "999")
+            page.locator("[data-run-submit]").click()
+            page.locator("[data-run-retry]").click()
+            page.fill("#runAnswer", "326")
+            page.locator("[data-run-submit]").click()
+            page.locator("[data-run-next]").click()
+            page.fill("#runAnswer", "444")
+            page.locator("[data-run-submit]").click()
+            page.locator("[data-run-next]").click()
+            page.fill("#runAnswer", "I read the passage and summarized it.")
+            page.locator("[data-run-submit]").click()
+            page.locator("[data-run-next]").click()
+            page.locator("[data-run-finish]").click()
+            page.locator("[data-run-exit]").click()
+            assert "PRACTICE HISTORY" in page.locator(".detail-panel").inner_text()
+            assert "999" not in page.locator(".detail-panel").inner_text()
+            page.locator("[data-open-sidebar]").click()
+            page.locator("[data-route='review']").first.click()
+            page.locator("[data-select-id='rv-weekend-paper']").click()
+            page.wait_for_function('document.querySelector(".detail-panel")?.innerText.includes("PRACTICE HISTORY")')
+            assert "999" in page.locator(".detail-panel").inner_text()
+            assert page.locator(".detail-panel [data-attempt-verdict]").count() == 1
+            assert page.locator(".detail-panel [data-decision-action='approve']").count() == 0
         assert_no_horizontal_overflow(page)
         assert not errors, errors
         mobile.close()

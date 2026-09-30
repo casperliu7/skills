@@ -165,6 +165,6 @@ An empty answer is manually graded, never automatically counted wrong.
 No raw SVG, arbitrary markup or remote image URL is accepted by the renderer.
 `analysis.attempt` is the latest run; `analysis.attempts` stores historical runs. Results include
 `first_given`, `first_outcome`, `answer_history` and `hints_used`. Score counts final answers,
-not independent mastery. The old paper approval never approves a new attempt.
+not independent mastery. `analysis.attempt_reviews` stores separately reviewed decisions keyed to `attempted_at`, with manual verdicts, parent note, and review time; this is a pending paper update until a reviewed merge. The old paper approval never approves a new attempt or unlocks another sitting after hand-in.
 Original-image is read-only in generic question-field builders so normal updates do not clear it.
 Existing installations need an explicitly reviewed field migration; importing the template is not a migration.

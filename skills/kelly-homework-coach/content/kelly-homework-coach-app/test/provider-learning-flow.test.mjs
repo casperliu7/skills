@@ -111,6 +111,76 @@ function base`,
     const analysis = JSON.parse(calls[1][1].fields.analysis);
     assert.equal(analysis.attempts.length, 2);
     assert.deepEqual(analysis.strengths, []);
+    calls.length = 0;
+    raw.status = "needs_review";
+    raw.analysis = JSON.stringify({
+      attempts: [
+        {
+          attempted_at: "fixture-attempt",
+          results: [
+            { ref: 1, outcome: "correct" },
+            { ref: 2, outcome: "ungraded", given: "an explanation" },
+          ],
+        },
+      ],
+      attempt_reviews: [],
+    });
+    await assert.rejects(
+      provider.submitAttemptReview({
+        paper_id: "p-fixture",
+        attempted_at: "stale",
+        verdicts: [{ ref: 2, outcome: "correct" }],
+        comment: "Read it",
+      }),
+      /current/,
+    );
+    await assert.rejects(
+      provider.submitAttemptReview({
+        paper_id: "p-fixture",
+        attempted_at: "fixture-attempt",
+        verdicts: [],
+        comment: "Read it",
+      }),
+      /manual mark/,
+    );
+    await assert.rejects(
+      provider.submitAttemptReview({
+        paper_id: "p-fixture",
+        attempted_at: "fixture-attempt",
+        verdicts: [{ ref: 2, outcome: "correct" }],
+        comment: " ",
+      }),
+      /required/,
+    );
+    assert.equal(calls.filter(([kind]) => kind === "write").length, 0);
+    const reviewed = await provider.submitAttemptReview({
+      paper_id: "p-fixture",
+      attempted_at: "fixture-attempt",
+      verdicts: [{ ref: 2, outcome: "correct" }],
+      comment: "Read the explanation.",
+    });
+    assert.equal(reviewed.status, "in_review");
+    const reviewWrite = calls.at(-1)[1];
+    assert.equal(reviewWrite.recordId, "record-fixture");
+    assert.equal(reviewWrite.baseCommitId, "head-fixture");
+    assert.equal(reviewWrite.autoMerge, false);
+    assert.equal(reviewWrite.fields.status, "needs_review");
+    assert.equal(JSON.parse(reviewWrite.fields.analysis).attempt_reviews[0].verdicts[0].outcome, "correct");
+    assert.equal(calls.filter(([kind]) => kind === "write").length, 1);
+    calls.length = 0;
+    Object.assign(raw, { "review-id": "rv-fixture", "target-type": "paper", "target-id": "p-fixture" });
+    await assert.rejects(provider.submitReview({ review_id: "rv-fixture", action: "approve" }), /old paper approval/);
+    assert.equal(calls.filter(([kind]) => kind === "write").length, 0);
+    raw.analysis = reviewWrite.fields.analysis;
+    await assert.rejects(
+      provider.submitAttemptReview({
+        paper_id: "p-fixture",
+        attempted_at: "fixture-attempt",
+        verdicts: [{ ref: 2, outcome: "correct" }],
+        comment: "Again",
+      }),
+      /already reviewed/,
+    );
     raw.status = "blocked";
     await assert.rejects(provider.submitPaperAttempt({ paper_id: "p-fixture", attempt: {} }));
   } finally {
