@@ -201,8 +201,11 @@ def test_demo_ui(browser, base_url: str) -> None:
     assert detail.locator("[data-decision-action='approve']").count() == 0
     assert detail.locator("[data-submit-attempt-review]").count() == 1
     assert detail.locator("[data-attempt-verdict]").count() == 1
-    page.on("dialog", lambda dialog: dialog.accept())
+    # Hosted sandboxes disallow modal alerts. Validation must be inline.
+    page.evaluate("() => { window.alert = () => { throw new Error('Modal alert must not be used'); }; }")
     detail.locator("[data-submit-attempt-review]").click()
+    assert detail.locator("[data-attempt-review-error]").is_visible()
+    assert detail.locator("[data-attempt-review-error]").inner_text().strip()
     assert detail.locator("[data-submit-attempt-review]").count() == 1
     detail.locator("[data-attempt-verdict]").select_option("correct")
     detail.locator("#attemptNote").fill("Read the explanation and checked the reasoning.")

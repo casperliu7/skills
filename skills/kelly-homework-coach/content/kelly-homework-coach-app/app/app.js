@@ -689,7 +689,7 @@ function attemptReviewForm(paper) {
   const open = (attempt.results || []).filter((entry) => entry.outcome === "ungraded");
   return `<section class="section"><h3>${esc(t("reviewAttempt"))}</h3>${state.attemptReviewRequests[paper.paper_id] ? `<p role="status">${esc(t("attemptReviewPending"))} ${esc(state.attemptReviewRequests[paper.paper_id])}</p>` : ""}<p class="note">${esc(t("reviewAttemptHint"))}</p>
     ${open.map((entry) => `<div class="field"><label for="attemptVerdict${esc(entry.ref)}">${esc(entry.ref)}. ${esc(entry.prompt)}</label><select id="attemptVerdict${esc(entry.ref)}" data-attempt-verdict="${esc(entry.ref)}"><option value="">${esc(t("selectMark"))}</option><option value="correct">${esc(t("correct"))}</option><option value="wrong">${esc(t("wrong"))}</option></select></div>`).join("")}
-    <div class="field"><label for="attemptNote">${esc(t("parentNotes"))}</label><textarea id="attemptNote" maxlength="2000"></textarea></div><button class="primary" type="button" data-submit-attempt-review="${esc(paper.paper_id)}" ${state.attemptReviewRequests[paper.paper_id] ? "disabled" : ""}>${esc(t("submitAttemptReview"))}</button></section>`;
+    <div class="field"><label for="attemptNote">${esc(t("parentNotes"))}</label><textarea id="attemptNote" maxlength="2000"></textarea></div><p class="note" data-attempt-review-error role="alert" hidden></p><button class="primary" type="button" data-submit-attempt-review="${esc(paper.paper_id)}" ${state.attemptReviewRequests[paper.paper_id] ? "disabled" : ""}>${esc(t("submitAttemptReview"))}</button></section>`;
 }
 
 function renderPaper(paper) {
@@ -1489,10 +1489,16 @@ document.addEventListener("click", async (event) => {
       outcome: document.getElementById(`attemptVerdict${entry.ref}`)?.value || "",
     }));
     const comment = document.getElementById("attemptNote")?.value?.trim() || "";
+    const errorNotice = document.querySelector("[data-attempt-review-error]");
     if (!comment || verdicts.some((v) => !["correct", "wrong"].includes(v.outcome))) {
-      window.alert(t("reviewAttemptRequired"));
+      if (errorNotice) {
+        errorNotice.textContent = t("reviewAttemptRequired");
+        errorNotice.hidden = false;
+        errorNotice.scrollIntoView({ block: "nearest" });
+      }
       return;
     }
+    if (errorNotice) errorNotice.hidden = true;
     if (state.busy || state.attemptReviewRequests[paper.paper_id]) return;
     state.busy = true;
     button.disabled = true;
@@ -1519,7 +1525,10 @@ document.addEventListener("click", async (event) => {
         render();
       }
     } catch (error) {
-      window.alert(error.message);
+      if (errorNotice) {
+        errorNotice.textContent = error.message;
+        errorNotice.hidden = false;
+      }
       button.disabled = false;
     } finally {
       state.busy = false;
